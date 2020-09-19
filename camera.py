@@ -1,10 +1,4 @@
-#3rd Party
-import numpy as np
-import cv2 as cv
-from tflite_runtime.interpreter import Interpreter
-import glob
-
-
+#Built-in
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
@@ -12,6 +6,22 @@ from __future__ import print_function
 import re
 import argparse
 import time
+
+#3rd Party
+from numpy import argpartition
+from numpy import squeeze
+from numpy import squeeze
+from cv2 import cvtColor, COLOR_BGR2RGB
+from cv2 import destroyAllWindows
+from cv2 import FONT_HERSHEY_SIMPLEX
+from cv2 import rectangle, resize
+from cv2 import imshow, imwrite
+from cv2 import putText
+from cv2 import VideoCapture
+from cv2 import waitKey
+from tflite_runtime.interpreter import Interpreter
+import glob
+
 
 def load_labels(path):
   with open(path,'r') as f:
@@ -33,29 +43,20 @@ def set_input_tensor(interpreter,image):
 
 def get_output_tensor(interpreter,index):
   output_details = interpreter.get_output_details()[index]
-  tensor = np.squeeze(interpreter.get_tensor(output_details['index']))
+  tensor = squeeze(interpreter.get_tensor(output_details['index']))
   return tensor
 
 def detect_objects(interpreter, image, threshold):
   """Returns a list of detection results, each a dictionary of object info."""
   set_input_tensor(interpreter, image)
-  interpreter.invoke()
+  interpreter.invoke() #From 30FPS to 2FPS lul, find a way to optimize that
 
   # Get all output details
   boxes = get_output_tensor(interpreter, 0)
   classes = get_output_tensor(interpreter, 1)
   scores = get_output_tensor(interpreter, 2)
   count = int(get_output_tensor(interpreter, 3))
-
-  results = []
-  for i in range(count):
-    if scores[i] >= threshold:
-      result = {
-          'bounding_box': boxes[i],
-          'class_id': classes[i],
-          'score': scores[i]
-      }
-      results.append(result)
+  results = [{'bounding_box': boxes[i],'class_id':classes[i],'score': scores[i]} for i in range(count) if scores[i] >= threshold  ]
   return results
 
 def annotate(frame, results, labels):
@@ -69,23 +70,21 @@ def annotate(frame, results, labels):
     ymin = int(ymin * CAMERA_HEIGHT)
     ymax = int(ymax * CAMERA_HEIGHT)
     # Overlay the box, label, and score on the camera preview
-    #annotator.bounding_box([xmin, ymin, xmax, ymax])
-    #annotator.text([xmin, ymin],
-    #               '%s\n%.2f' % (labels[obj['class_id']], obj['score']))
-    cv.rectangle(frame,(xmin,ymin),(xmax,ymax),(255,0,0))
-    cv.putText(frame,f"{labels[obj['class_id']+1]}, {obj['score']:.3f}",\
-        (xmin,ymin+30),cv.FONT_HERSHEY_SIMPLEX,1,(0,0,0),1)
+    rectangle(frame,(xmin,ymin),(xmax,ymax),(255,0,0))
+    putText(frame,f"{labels[obj['class_id']+1]}, {obj['score']:.3f}",\
+        (xmin,ymin+30),FONT_HERSHEY_SIMPLEX,1,(0,0,0),1)
+    
 def classify_image(interpreter, image, top_k=1):
   set_input_tensor(interpreter, image)
   interpreter.invoke()
   output_details = interpreter.get_output_details()[0]
-  output = np.squeeze(interpreter.get_tensor(output_details['index']))
+  output = squeeze(interpreter.get_tensor(output_details['index']))
 
-  if output_details['dtype'] == np.uint8:
+  if output_details['dtype'] == uint8:
     scale, zero_point = output_details['quantization']
     output = scale * (output - zero_point)
 
-  ordered = np.argpartition(-output, top_k)
+  ordered = argpartition(-output, top_k)
   return [(i,output[i]) for i in ordered[:top_k]]
 
 if __name__ == "__main__":
@@ -101,37 +100,35 @@ if __name__ == "__main__":
             type=float,\
             default=0.6)
   args= parser.parse_args()
+  
+  threshold_value = args.threshold
   labels = load_labels(args.labels)
   interpreter = Interpreter(args.model)
   interpreter.allocate_tensors()
   _, height, width, _ = interpreter.get_input_details()[0]['shape']
   print(f"{height} {width}")
 
-  cap = cv.VideoCapture(0)
+  cap = VideoCapture(0)
   CAMERA_WIDTH,CAMERA_HEIGHT = 640,480
   while True:
+    start = time.time()
     ret, frame = cap.read()
     if not ret:
       break
-    orig = cv.resize(frame,(CAMERA_WIDTH,CAMERA_HEIGHT))
-    frame = cv.resize(cv.cvtColor(frame,cv.COLOR_BGR2RGB),(width,height))
-    #results = classify_image(interpreter,frame,1)
-    results = detect_objects(interpreter, frame,args.threshold)
-    annotate(orig,results,labels)
-    #print(results)
-    """
-    pred = []
-    for res in results:
-      pred.append(str(labels[int(res[0])] + ':' + str(res[1])))
-    print(pred)
-    #print(f"{labels[int(results[0][0])]} : {str(results[0][1])}")
-    """
-    cv.imshow("Frame",orig)
-    key = cv.waitKey(1)
+    orig = resize(frame,(CAMERA_WIDTH,CAMERA_HEIGHT))
+    frame = resize(cvtColor(orig,COLOR_BGR2RGB),(width,height))
+    results = detect_objects(interpreter, frame, threshold_value)
+    #annotate(orig,results,labels)
+
+    imshow("Frame",orig)
+    
+    print(f'Avg FPS: {1/(time.time()-start)}')
+    
+    key = waitKey(1)
     if key  == ord('q') & 0xFF:
       break
     elif key == ord('s') & 0xFF:
       nb_imgs = len(glob.glob("./images/*.*"))
-      cv.imwrite(f"./images/{nb_imgs:03d}.jpg",frame)
-  cv.destroyAllWindows()
+      imwrite(f"./images/{nb_imgs:03d}.jpg",orig)
+  destroyAllWindows()
   cap.release()
