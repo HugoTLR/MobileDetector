@@ -25,15 +25,10 @@ import glob
 
 def load_labels(path):
   with open(path,'r') as f:
-    #return {i: line.strip() for i,line in enumerate(f.readlines())}
     lines = f.readlines()
     labels = {}
     for row_number, content in enumerate(lines):
-      pair = re.split(r'[:\s]+',content.strip(), maxsplit=1)
-      if len(pair) == 2 and pair[0].strip().isdigit():
-        labels[int(pair[0])] = pair[1].strip()
-      else:
-        labels[row_number] = pair[0].strip()
+      labels[row_number] = content.split('\n')[0]
   return labels
 
 def set_input_tensor(interpreter,image):
@@ -71,8 +66,8 @@ def annotate(frame, results, labels):
     ymax = int(ymax * CAMERA_HEIGHT)
     # Overlay the box, label, and score on the camera preview
     rectangle(frame,(xmin,ymin),(xmax,ymax),(255,0,0))
-    putText(frame,f"{labels[obj['class_id']+1]}, {obj['score']:.3f}",\
-        (xmin,ymin+30),FONT_HERSHEY_SIMPLEX,1,(0,0,0),1)
+    text = f"{labels[obj['class_id']+1]}, {obj['score']:.3f}"
+    putText(frame, text, (xmin,ymin+30), FONT_HERSHEY_SIMPLEX, 1, (0,0,0), 1)
     
 def classify_image(interpreter, image, top_k=1):
   set_input_tensor(interpreter, image)
@@ -118,7 +113,7 @@ if __name__ == "__main__":
     orig = resize(frame,(CAMERA_WIDTH,CAMERA_HEIGHT))
     frame = resize(cvtColor(orig,COLOR_BGR2RGB),(width,height))
     results = detect_objects(interpreter, frame, threshold_value)
-    #annotate(orig,results,labels)
+    annotate(orig,results,labels)
 
     imshow("Frame",orig)
     
