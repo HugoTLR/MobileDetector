@@ -7,6 +7,9 @@ import re
 import argparse
 import time
 
+#Local
+import config
+
 #3rd Party
 from numpy import argpartition
 from numpy import squeeze
@@ -60,10 +63,10 @@ def annotate(frame, results, labels):
     # Convert the bounding box figures from relative coordinates
     # to absolute coordinates based on the original resolution
     ymin, xmin, ymax, xmax = obj['bounding_box']
-    xmin = int(xmin * CAMERA_WIDTH)
-    xmax = int(xmax * CAMERA_WIDTH)
-    ymin = int(ymin * CAMERA_HEIGHT)
-    ymax = int(ymax * CAMERA_HEIGHT)
+    xmin = int(xmin * config.CAMERA_WIDTH)
+    xmax = int(xmax * config.CAMERA_WIDTH)
+    ymin = int(ymin * config.CAMERA_HEIGHT)
+    ymax = int(ymax * config.CAMERA_HEIGHT)
     # Overlay the box, label, and score on the camera preview
     rectangle(frame,(xmin,ymin),(xmax,ymax),(255,0,0))
     text = f"{labels[obj['class_id']+1]}, {obj['score']:.3f}"
@@ -99,25 +102,24 @@ if __name__ == "__main__":
   threshold_value = args.threshold
   labels = load_labels(args.labels)
   interpreter = Interpreter(args.model)
+  
   interpreter.allocate_tensors()
   _, height, width, _ = interpreter.get_input_details()[0]['shape']
-  print(f"{height} {width}")
 
   cap = VideoCapture(0)
-  CAMERA_WIDTH,CAMERA_HEIGHT = 640,480
   while True:
-    start = time.time()
+    #start = time.time()
     ret, frame = cap.read()
     if not ret:
       break
-    orig = resize(frame,(CAMERA_WIDTH,CAMERA_HEIGHT))
+    orig = resize(frame,(config.CAMERA_WIDTH,config.CAMERA_HEIGHT))
     frame = resize(cvtColor(orig,COLOR_BGR2RGB),(width,height))
     results = detect_objects(interpreter, frame, threshold_value)
     annotate(orig,results,labels)
 
     imshow("Frame",orig)
     
-    print(f'Avg FPS: {1/(time.time()-start)}')
+    #print(f'Avg FPS: {1/(time.time()-start)}')
     
     key = waitKey(1)
     if key  == ord('q') & 0xFF:
